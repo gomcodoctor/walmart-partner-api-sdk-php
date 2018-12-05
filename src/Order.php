@@ -28,7 +28,7 @@ class Order extends BaseClient
      * @param string $env
      * @throws \Exception
      */
-    public function __construct($consumerId, $privateKey, array $config = [], $env = self::ENV_PROD)
+    public function __construct($consumerId, $privateKey, $channelType,  array $config = [], $env = self::ENV_PROD)
     {
         if ( ! isset($config['wmConsumerChannelType'])) {
             $config['wmConsumerChannelType'] = '0f3e4dd4-0514-4346-b39d-af0e00ea066d';
@@ -50,7 +50,7 @@ class Order extends BaseClient
         ]);
 
         // Create the client.
-        parent::__construct($consumerId, $privateKey,
+        parent::__construct($consumerId, $privateKey,$channelType,
             $config,
             $env
         );

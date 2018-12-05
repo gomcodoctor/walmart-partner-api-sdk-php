@@ -37,16 +37,19 @@ class BaseClient extends GuzzleClient
 
     protected $privateKey;
 
+    protected $channelType;
+
     /**
      * @param array $config
      * @param string $env
      * @throws \Exception
      */
-    public function __construct($consumerId, $privateKey, array $config = [], $env = self::ENV_PROD)
+    public function __construct($consumerId, $privateKey, $channelType, array $config = [], $env = self::ENV_PROD)
     {
 
         $this->consumerId = $consumerId;
         $this->privateKey = $privateKey;
+        $this->channelType = $channelType;
         /*
          * Make sure ENV is valid
          */
@@ -136,7 +139,7 @@ class BaseClient extends GuzzleClient
             $request = $request->withHeader('WM_QOS.CORRELATION_ID',  base64_encode(Random::string(16)));
             $request = $request->withHeader('WM_SEC.TIMESTAMP',  $timestamp);
             $request = $request->withHeader('WM_SEC.AUTH_SIGNATURE',  $signature);
-            $request = $request->withHeader('WM_CONSUMER.CHANNEL.TYPE',  '0f3e4dd4-0514-4346-b39d-af0e00ea066d');
+            $request = $request->withHeader('WM_CONSUMER.CHANNEL.TYPE',  $this->channelType);
             $request = $request->withHeader('Accept',  'application/xml');
             return $request->withHeader('WM_CONSUMER.ID',  $this->consumerId);
         }));
