@@ -69,7 +69,7 @@ class BaseClient extends GuzzleClient
 
         // Apply some defaults.
         $config = array_merge_recursive($config, [
-            'max_retries' => 3,
+            'max_retries' => 4,
         ]);
 
         // If an override base url is not provided, determine proper baseurl from env
