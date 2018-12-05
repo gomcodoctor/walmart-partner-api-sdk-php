@@ -3,7 +3,7 @@ namespace Walmart;
 
 use fillup\A2X;
 use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Message\ResponseInterface;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * Partial Walmart API client implemented with Guzzle.
@@ -28,10 +28,11 @@ class Order extends BaseClient
      * @param string $env
      * @throws \Exception
      */
-    public function __construct(array $config = [], $env = self::ENV_PROD)
+    public function __construct($consumerId, $privateKey, array $config = [], $env = self::ENV_PROD)
     {
         if ( ! isset($config['wmConsumerChannelType'])) {
-            throw new \Exception('wmConsumerChannelType is required in configuration for Order APIs', 1467486702);
+            $config['wmConsumerChannelType'] = '0f3e4dd4-0514-4346-b39d-af0e00ea066d';
+//            throw new \Exception('wmConsumerChannelType is required in configuration for Order APIs', 1467486702);
         }
 
         $this->wmConsumerChannelType = $config['wmConsumerChannelType'];
@@ -49,7 +50,7 @@ class Order extends BaseClient
         ]);
 
         // Create the client.
-        parent::__construct(
+        parent::__construct($consumerId, $privateKey,
             $config,
             $env
         );
@@ -62,7 +63,7 @@ class Order extends BaseClient
          * Overriding call to list() since I cannot define a method with the same name as a reserved keyword.
          */
         if ($name === 'list') {
-            return $this->listAll($arguments[0]);
+            return $this->listAll($arguments);
         }
         return parent::__call($name, $arguments);
     }
@@ -171,7 +172,7 @@ class Order extends BaseClient
 
         $a2x = new A2X($order, $schema);
         $xml = $a2x->asXml();
-        
+
         return $this->cancelOrder([
             'purchaseOrderId' => $purchaseOrderId,
             'order' => $xml,

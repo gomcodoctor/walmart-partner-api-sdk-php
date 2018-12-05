@@ -1,6 +1,10 @@
 <?php
 namespace Walmart;
 
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use phpseclib\Crypt\Random;
+use Psr\Http\Message\RequestInterface;
 use Walmart\middleware\AuthSubscriber;
 use Walmart\middleware\MockSubscriber;
 use Walmart\middleware\XmlNamespaceSubscriber;
@@ -8,6 +12,11 @@ use Walmart\middleware\XmlNamespaceSubscriber;
 use GuzzleHttp\Client as HttpClient;
 use GuzzleHttp\Command\Guzzle\GuzzleClient;
 use GuzzleHttp\Command\Guzzle\Description;
+use Walmart\Auth\Signature;
+use Walmart\Order;
+use GuzzleHttp\Client;
+use Walmart\Utils;
+use GuzzleHttp\Command\Result;
 
 /**
  * Partial Walmart API client implemented with Guzzle.
@@ -24,13 +33,20 @@ class BaseClient extends GuzzleClient
 
     public $env;
 
+    protected $consumerId;
+
+    protected $privateKey;
+
     /**
      * @param array $config
      * @param string $env
      * @throws \Exception
      */
-    public function __construct(array $config = [], $env = self::ENV_PROD)
+    public function __construct($consumerId, $privateKey, array $config = [], $env = self::ENV_PROD)
     {
+
+        $this->consumerId = $consumerId;
+        $this->privateKey = $privateKey;
         /*
          * Make sure ENV is valid
          */
@@ -41,7 +57,7 @@ class BaseClient extends GuzzleClient
         /*
          * Check that consumerId and privateKey are set
          */
-        if ( ! isset($config['consumerId']) || ! isset($config['privateKey'])) {
+        if ( ! $this->consumerId || ! $this->privateKey) {
             throw new \Exception('Configuration missing consumerId or privateKey', 1466965269);
         }
 
@@ -51,14 +67,6 @@ class BaseClient extends GuzzleClient
         // Apply some defaults.
         $config = array_merge_recursive($config, [
             'max_retries' => 3,
-            'http_client_options' => [
-                'defaults' => [
-                    'auth' => [
-                        $config['consumerId'],
-                        $config['privateKey']
-                    ]
-                ],
-            ],
         ]);
 
         // If an override base url is not provided, determine proper baseurl from env
@@ -74,7 +82,7 @@ class BaseClient extends GuzzleClient
         parent::__construct(
             $this->getHttpClientFromConfig($config),
             $this->getDescriptionFromConfig($config),
-            $config
+            null, null, null, ['process' => false]
         );
 
         // Ensure that ApiVersion is set.
@@ -82,7 +90,6 @@ class BaseClient extends GuzzleClient
             'defaults/ApiVersion',
             $this->getDescription()->getApiVersion()
         );
-
     }
 
     /**
@@ -113,25 +120,28 @@ class BaseClient extends GuzzleClient
         $clientOptions = isset($config['http_client_options'])
             ? $config['http_client_options']
             : [];
-        $client = new HttpClient($clientOptions);
 
-        /*
-         * Attach subscriber for adding auth headers just before request
-         */
-        $client->getEmitter()->attach(new AuthSubscriber());
+        $handler = HandlerStack::create();
+        $handler->push(Middleware::mapRequest(function (RequestInterface $request) {
+            $requestUrl = $request->getUri();
+            $requestMethod = $request->getMethod();
+            $timestamp = Utils::getMilliseconds();
+            $signature = Signature::calculateSignature($this->consumerId,
+                $this->privateKey, $requestUrl, $requestMethod, $timestamp);
 
-        /*
-         * Attach subscriber for removing xml namespaces on response
-         */
-        $client->getEmitter()->attach(new XmlNamespaceSubscriber());
+            /*
+             * Add required headers to request
+             */
+            $request = $request->withHeader('WM_SVC.NAME', 'Walmart Marketplace');
+            $request = $request->withHeader('WM_QOS.CORRELATION_ID',  base64_encode(Random::string(16)));
+            $request = $request->withHeader('WM_SEC.TIMESTAMP',  $timestamp);
+            $request = $request->withHeader('WM_SEC.AUTH_SIGNATURE',  $signature);
+            $request = $request->withHeader('WM_CONSUMER.CHANNEL.TYPE',  '0f3e4dd4-0514-4346-b39d-af0e00ea066d');
+            $request = $request->withHeader('Accept',  'application/xml');
+            return $request->withHeader('WM_CONSUMER.ID',  $this->consumerId);
+        }));
 
-        /*
-         * If mock env, attach MockSubscriber
-         */
-        if($this->env === self::ENV_MOCK) {
-            $client->getEmitter()->attach(new MockSubscriber());
-        }
-
+        $client = new Client(['handler' => $handler, 'http_errors' => true]);
         return $client;
     }
 
@@ -155,7 +165,6 @@ class BaseClient extends GuzzleClient
         if(isset($config['description_override'])){
             $data = array_merge($data, $config['description_override']);
         }
-
         return new Description($data);
     }
 
